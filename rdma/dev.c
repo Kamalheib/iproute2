@@ -218,6 +218,29 @@ static int dev_parse_cb(const struct nlmsghdr *nlh, void *data)
 	return MNL_CB_OK;
 }
 
+
+static int dev_parse_dim_cb(const struct nlmsghdr *nlh, void *data)
+{
+	struct nlattr *tb[RDMA_NLDEV_ATTR_MAX] = {};
+	struct rd *rd = data;
+	const char *name;
+	uint32_t idx;
+
+	mnl_attr_parse(nlh, 0, rd_attr_cb, tb);
+	if (!tb[RDMA_NLDEV_ATTR_DEV_INDEX] || !tb[RDMA_NLDEV_ATTR_DEV_NAME])
+		return MNL_CB_ERROR;
+	open_json_object(NULL);
+	idx =  mnl_attr_get_u32(tb[RDMA_NLDEV_ATTR_DEV_INDEX]);
+	name = mnl_attr_get_str(tb[RDMA_NLDEV_ATTR_DEV_NAME]);
+	print_color_uint(PRINT_ANY, COLOR_NONE, "ifindex", "%u: ", idx);
+	print_color_string(PRINT_ANY, COLOR_NONE, "ifname", "%s: ", name);
+
+	dev_print_dim_setting(rd, tb);
+
+	newline(rd);
+	return MNL_CB_OK;
+}
+
 static int dev_no_args(struct rd *rd)
 {
 	uint32_t seq;
@@ -234,10 +257,27 @@ static int dev_no_args(struct rd *rd)
 	return ret;
 }
 
+static int dev_show_dim(struct rd *rd)
+{
+	uint32_t seq;
+	int ret;
+
+	rd_prepare_msg(rd, RDMA_NLDEV_CMD_GET,
+		       &seq, (NLM_F_REQUEST | NLM_F_ACK));
+	mnl_attr_put_u32(rd->nlh, RDMA_NLDEV_ATTR_DEV_INDEX, rd->dev_idx);
+	ret = rd_send_msg(rd);
+	if (ret)
+		return ret;
+
+	ret = rd_recv_msg(rd, dev_parse_dim_cb, rd, seq);
+	return ret;
+}
+
 static int dev_one_show(struct rd *rd)
 {
 	const struct rd_cmd cmds[] = {
 		{ NULL,		dev_no_args},
+		{ "adaptive-moderation",	dev_show_dim},
 		{ 0 }
 	};
 
